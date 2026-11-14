@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-lab
+  namespace: argocd
+spec:
+  description: Isolated learning app; no Argo management or cluster privileges
+  sourceRepos:
+    - https://github.com/jgerchev/gitops-lab
+  sourceNamespaces:
+    - argocd
+  destinations:
+    - namespace: gitops-lab
+      server: https://kubernetes.default.svc
+  # Required by gitops/namespace.yaml. AppProject cannot restrict cluster-scoped
+  # resources by metadata.name; see README for this deliberate lab tradeoff.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: networking.k8s.io
+      kind: Ingress
+  orphanedResources:
+    warn: true

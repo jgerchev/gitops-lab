@@ -1,0 +1,7 @@
+# Kubernetes Service endpoints must be reachable by pods on the guest node IP.
+# This is the private NAT guest, never a publicly forwarded API listener.
+bind-address: 0.0.0.0
+write-kubeconfig-mode: "0600"
+cluster-cidr: 10.42.0.0/16
+service-cidr: 10.43.0.0/16
+# Traefik and ServiceLB deliberately retain their K3s defaults (enabled).
