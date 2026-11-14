@@ -23,8 +23,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          # Pending publication: coordinator must pin tag@sha256 using app/set-image.py.
-          image: ghcr.io/jgerchev/gitops-lab-app:v1
+          # Published digest pinned with app/set-image.py; see app/README.md.
+          image: ghcr.io/jgerchev/gitops-lab-app:v1@sha256:9317280a4d6b6df9e9dca1eaf05af6189cdbc22af4052f79e34fd5f9b2d1b599
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

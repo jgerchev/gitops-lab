@@ -8,11 +8,15 @@ The root overlay depends on the base: keep both until Terraform destroys them.
 
 ## Current status and prerequisites
 
-Implementation and local validation only; no host connection, plan, apply, SSH
-guest test, or production change was performed. Discovery found the live host
-without libvirt/QEMU and sudo requiring authentication. The user approved scoped
-QEMU/libvirt prerequisites; **the coordinator, not this worker, handles them**.
-That approval does not imply permission to alter Pi-hole or other services.
+The coordinator installed the explicitly approved QEMU/libvirt prerequisites,
+verified system-libvirt access and generated/reviewed a seven-create lab-only
+plan. Apply created all resources after correcting the cloud-init volume format
+to `iso` (libvirt readback detects ISO despite QEMU's CD-ROM raw driver). The
+guest became SSH-accessible, but the host swap-safety monitor triggered and the
+VM is now shut off. **Do not restart/apply before safety review.** See the
+top-level README for current live results; worker validation alone
+does not establish lifecycle acceptance. Prerequisite approval
+does not imply permission to alter Pi-hole or other services.
 
 On Ubuntu 24.04 the scoped prerequisite package set is `qemu-kvm`, `qemu-utils`,
 `libvirt-daemon-system`, and `libvirt-clients`. An authorized operator must review
@@ -159,8 +163,11 @@ provider metadata and saved plans are not a replacement for state backups.
 
 Guest autostart is disabled to protect host memory after reboot. For an approved
 graceful stop: `virsh -c qemu:///system shutdown gitops-lab`, then verify it is
-off with `virsh -c qemu:///system domstate gitops-lab`. Restart with
-`virsh -c qemu:///system start gitops-lab` and verify SSH/services. Configuration
+off with `virsh -c qemu:///system domstate gitops-lab`. After a host reboot, first
+inspect `virsh -c qemu:///system net-list --all` and start the inactive lab network
+with `virsh -c qemu:///system net-start gitops-lab`. The lab network deliberately
+does not autostart. Then restart with `virsh -c qemu:///system start gitops-lab`
+and verify SSH/services. Configuration
 has `running=true`, so a later apply may start a stopped guest again.
 
 For full cleanup or the clean-disk recreation exercise, back up state and

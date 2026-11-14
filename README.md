@@ -2,6 +2,117 @@
 
 Isolated Terraform/libvirt VM with K3s, Argo CD and a small Git-managed HTTP application.
 
-Implementation is in progress. See [the assignment](Home_Server_Lab_Assignment.md) and [the implementation contract](CONTRACT.md).
+See [the assignment](Home_Server_Lab_Assignment.md) and [the implementation contract](CONTRACT.md).
 
-**Not deployed:** virtualization prerequisites on the target host require explicit approval. No live acceptance tests have passed yet.
+**Stopped at the host swap-safety gate.** Terraform created the VM, but host swap activity triggered shutdown during first boot. The VM is now **shut off**; K3s/Argo CD were **not installed**. The assignment is incomplete. Do not restart/apply until capacity and swap behavior are reviewed. Exact invocation details are in each component's README.
+
+## Scope and safety
+
+This is a separate public repository, not part of an existing home-service deployment repository. Only resources prefixed `gitops-lab` belong to this exercise. Do not repurpose existing domains, networks, pools, Docker directories or backup jobs. Host package prerequisites survive lab cleanup; they are not Terraform-managed lab resources.
+
+Prerequisites: an amd64 Linux KVM host, accessible `/dev/kvm`, libvirt system connection, SSH with public-key authentication, Git, curl, Python 3, image/seed tooling, and sufficient RAM/SSD headroom. `libvirt` group membership grants powerful host access; use only a trusted operator account. Local Docker is optional: images build on GitHub-hosted runners, never the production runner.
+
+Pinned versions:
+
+| Component | Version |
+|---|---|
+| Terraform | 1.17.2 |
+| dmacvicar/libvirt | 0.9.9; committed lock file |
+| Guest OS | Ubuntu Server 24.04 amd64; exact dated image/hash in `infra/` |
+| K3s | v1.37.2+k3s1 |
+| Argo CD | v3.6.1 non-HA; Kubernetes 1.37 is in its tested matrix |
+| Application | v1/v2; published/verified digests in `app/published-images.json` |
+
+## Start sequence
+
+1. Collect baseline measurements on the virtualization host using `python3 scripts/preflight.py --samples 60`, saving output **outside Git**. Inspect all LAN, Docker, VPN, libvirt, Pod and Service subnets. Observe representative workload peaks, particularly photo processing, where practical.
+2. Verify existing services and DNS before any lab operation. Use `MemAvailable`, not `MemFree`; ignore the first vmstat sample when interpreting current swap rates. Old occupied swap is not evidence of current thrashing.
+3. Follow `infra/README.md`: verify the dated cloud image checksum, provide a public SSH key, initialize an external local backend, review the plan, and apply only lab-owned resources. Back up state outside the checkout and guest. Never commit plans/state, and do not apply concurrently.
+4. Confirm SSH to `vm_ip`, cloud-init completion, root disk expansion and a second Terraform plan with no changes. Defaults: 2 vCPU, 3072 MiB RAM, 25 GiB root disk.
+5. Publish each application release once following `app/README.md`. Confirm the package is public and anonymous pulls work. Pin the published v1 digest in `gitops/deployment.yaml`; keep both release tags available for rebuilds.
+6. Follow `bootstrap/README.md` to install the pinned K3s/Argo CD and apply the restricted project/application. Run kubectl inside the VM with its protected K3s kubeconfig; do not merge it with a production context.
+7. Wait for node Ready, required pods ready and Argo application Synced/Healthy. Open the loopback-only tunnel below and check the response. Repeat host measurements and existing-service checks.
+
+## Access and traffic path
+
+Replace `<host>` with an existing SSH alias or host and `<VM_IP>` with Terraform output. No router, Caddy, Pi-hole or VPN configuration changes are required.
+
+```sh
+ssh -N -L 127.0.0.1:8081:<VM_IP>:80 <host>
+curl --fail -H 'Host: gitops-lab.test' http://127.0.0.1:8081/
+```
+
+Path: workstation loopback → SSH connection terminating on host → VM Traefik :80 → Ingress host/path match → ClusterIP Service :80 → non-root application Pod :8080. The host's own port 80 is not used by this forwarding destination.
+
+For Argo CD, use the component README's VM-loopback kubectl port-forward plus a jump-host SSH tunnel. Keep TLS, and retrieve the initial admin password privately; do not copy it into evidence or Git. Never expose the UI/API on public or host-wide listeners.
+
+The lab uses its own `192.168.250.0/24` NAT network (recheck conflicts before every apply). DNS is disabled **only on this libvirt network** to avoid an existing wildcard DNS listener; DHCP remains enabled and cloud-init supplies guest resolvers. Kubernetes defaults are Pod `10.42.0.0/16` and Service `10.43.0.0/16`.
+
+## Acceptance procedure
+
+Save timestamped output privately; publish only sanitized summaries and commit IDs.
+
+| Exercise | Evidence required |
+|---|---|
+| Initial v1 | Synced/Healthy, ready rollout, HTTP 200 containing `gitops-lab v1` |
+| Push v2 | Pinned v2 commit pushed; automatic reconciliation and HTTP v2 without manual kubectl deployment |
+| Drift | Scale Deployment manually; selfHeal restores `spec.replicas: 1` from Git |
+| Broken image | Commit a nonexistent **tag without an existing digest**, capture pod description/events and Argo status |
+| Recovery | `git revert` the broken commit; verify rollout, Argo status and HTTP v2 |
+| Bootstrap repeat | Rerun bootstrap; versions unchanged, no unintended reinstall |
+| Graceful restart | `virsh -c qemu:///system shutdown gitops-lab`, wait for shut off, start and verify recovery |
+| Clean-disk rebuild | Reviewed destroy/apply recreates writable root disk and seed; bootstrap deploys expected Git version without restoring guest cluster data |
+| Full cleanup | Reviewed destroy plan only lab-owned resources; afterward no lab domain, disk/seed/base volume, pool or NAT network remains |
+| Final recreation | Reapply and bootstrap from clean disk; leave healthy v2 running after safety checks |
+
+An invalid tag may leave the old healthy pod serving traffic during RollingUpdate; HTTP availability does not imply successful rollout. Argo may show Progressing rather than immediately Degraded. Diagnose the actual state instead of asserting one predetermined failure label.
+
+## Diagnostics and shutdown
+
+- Host: `free -h`, `vmstat 1`, `docker stats --no-stream`, `df -h /`, libvirt domain/network/pool inventory. `scripts/preflight.py` is read-only, bounded, and includes these measurements.
+- Guest: cloud-init status/logs, K3s service journal, `sudo k3s kubectl get nodes,pods -A`, deployment rollout status, pod descriptions, ordered events, Service endpoints and Traefik logs.
+- Network: first verify host-to-VM SSH/HTTP, then Ingress Host header, then Service selectors/endpoints, then Pod readiness. Inspect Docker/libvirt forwarding interaction without flushing firewall rules or changing security controls.
+- On sustained swap activity, OOM, or production slowdown, gracefully shut down the lab and record the evidence. Do not stop production services or silently reduce safeguards to force completion. Avoid concurrent Ollama inference while evaluating this constrained host.
+- Routine stop/start is via the lab domain only. After a host reboot, inspect network inventory and explicitly start the inactive `gitops-lab` network before starting the VM; network autostart is disabled. A stopped VM can cause Terraform to propose restoring its configured running state; inspect that plan. Graceful shutdown is not destruction.
+- v1/v2 are deliberately minimal, single-threaded demo servers: a stalled HTTP request can block probes. Keep them behind the isolated SSH access path; see `app/README.md` for this known review finding. Never store real private data in the VM destroyed by these exercises.
+
+## State, recreation and cleanup
+
+Use an explicit external backend path and external provider-data directory as described in `infra/README.md`, restrictive file permissions, one operator, and a separate backup outside the guest. Never back up live guest database files as a substitute for reconstruction from Git. Copying state alone onto the same physical disk is not disaster protection: keep an additional protected off-host copy. No changes to existing family backup schedules are part of this lab.
+
+Before destroy, confirm backend identity, review the saved destroy plan and every resource name/path. After destroy, verify using libvirt inventory and the dedicated storage directory, and recheck existing service health/DNS. Keep state/backups until cleanup is verified. Do not delete unrelated or package-created default networks. Follow `infra/README.md` for the exact wrapper invocation.
+
+## Observations and results — 2026-11-14
+
+Raw evidence is stored privately outside this checkout; internal addresses, secrets, and detailed production inventory are not published here.
+
+| Check | Observed result |
+|---|---|
+| Initial capacity | About 4.1 GiB available of 7.6 GiB RAM; 148 GiB SSD free; 1.5 GiB swap occupied |
+| Initial 10-second vmstat | No sustained swapping: samples after the first were zero except one small swap-in sample; this does not prove peak-load safety |
+| Ollama | Service active, no model loaded |
+| Intentionally unused applications | Left stopped; no start/config changes made |
+| Documentation discrepancy | Additional analytics containers are already running; resource baseline includes them |
+| Approved host prerequisites | Installed QEMU/libvirt/image tooling; added operator to libvirt/kvm; system connection works; checksum-verified Terraform installed in user lab tooling |
+| Package default network | Created inactive by package setup; not enabled or used by lab |
+| Post-prerequisite health | Existing dashboard, photo service, media service and password manager HTTP 200; split-DNS lookup resolves; no production configuration changes |
+| Post-prerequisite capacity | About 4.1 GiB available; short follow-up samples had zero current swap activity |
+| Application unit tests | 15 passed locally and in the v1 publication workflow |
+| v1 image build/push | Successful GitHub-hosted run [43615319026](https://github.com/jgerchev/gitops-lab/actions/runs/43615319026) |
+| v2 image build/push | Successful GitHub-hosted run [43615417852](https://github.com/jgerchev/gitops-lab/actions/runs/43615417852) |
+| Public registry access | User changed package to public; anonymous GET of v1/v2 OCI indexes succeeded, header and independently computed SHA256 match workflow digests; v1 pinned in Git |
+| Infrastructure validation | fmt, init, validate and nine safety tests passed; reviewed initial plan contained exactly seven lab creates |
+| Provider diagnosis | First apply reported seed target `raw` versus libvirt-detected `iso`; corrected volume target to `iso`. Reviewed recovery plan replaced only tainted lab seed and created VM; apply succeeded |
+| Initial guest reachability | SSH host key retrieved through authenticated host, neighbor MAC matched Terraform reservation and domain NIC; authenticated guest SSH later used for shutdown |
+| Swap safety gate | Monitor observed 109 current samples before stopping; peak swap-in 7264 KiB/s, swap-out 27696 KiB/s. Five consecutive nonzero samples at 16:32:35–39 UTC triggered graceful shutdown request |
+| Shutdown | ACPI request did not stop the VM promptly; authenticated guest `sudo systemctl poweroff` succeeded. Domain confirmed `shut off`; no forced power-off |
+| After shutdown | About 4.4 GiB available, 1.8 GiB swap occupied; four current follow-up samples had zero swap I/O. SSD free about 146 GiB |
+| Production services | During safety follow-up, dashboard/photo/media/password-manager endpoints returned HTTP 200 and DNS resolved; production containers remained running |
+| State backup | Restricted host backup and additional mode-0600 off-host workstation copy, both outside Git/guest; local-backend state retained for safe cleanup |
+| Bootstrap validation | Worker: 13 tests with downloaded artifacts passed plus ShellCheck. Coordinator: 10 static tests passed, 3 artifact-dependent tests skipped; no guest bootstrap executed |
+| Read-only review | No bootstrap blocker found; explicit network startup after host reboot documented. Single-threaded HTTP demo limitation documented without overwriting immutable releases |
+| Kubernetes, GitOps and lifecycle tests | NOT RUN: bootstrap/repeat, Synced/Healthy, ingress HTTP, v2 reconciliation, drift, broken rollout/revert, successful restart, clean rebuild, full cleanup and final running v2 |
+
+No Immich peak-processing measurement has been performed yet. This sample establishes a failed operational safety gate, not a definitive diagnosis of swap cause or proof that a memory upgrade is the only solution. Do not silently lower VM memory or stop production services. Review host workload/swap behavior and agree on a safe retry before resuming.
+
+Lab domain, dedicated network/pool and volumes remain Terraform-managed; the VM is off and no cluster exists. The requested final running-v2 state and cleanup demonstration were not reached because safety takes priority. The full assignment is not complete until the live acceptance results replace the pending entries above.

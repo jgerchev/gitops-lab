@@ -98,9 +98,10 @@ resource "libvirt_cloudinit_disk" "lab" {
 }
 
 resource "libvirt_volume" "seed" {
-  name   = "gitops-lab-seed.iso"
-  pool   = libvirt_pool.lab.name
-  target = { format = { type = "raw" } }
+  name = "gitops-lab-seed.iso"
+  pool = libvirt_pool.lab.name
+  # Libvirt identifies the uploaded cloud-init file as ISO, not raw.
+  target = { format = { type = "iso" } }
   create = { content = { url = libvirt_cloudinit_disk.lab.path } }
 }
 

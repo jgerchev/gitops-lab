@@ -52,10 +52,11 @@ the listed SHA as a commit (not an unpeeled annotated tag).
 
 ## Publish once, after explicit approval
 
-**Current status: neither image has been published by this implementation.**
-`gitops/deployment.yaml` intentionally has a temporary `:v1` reference pending
-publication. Do not expect a healthy rollout until publication, pull access,
-and digest pinning are complete. No fabricated digest is committed.
+Both releases were published by the coordinator using the workflow. See
+`published-images.json` for build digests/run links and anonymous-access status.
+Do not expect a healthy rollout until pull access and verified digest pinning
+are complete. The following describes how the one-time publication was done;
+do not rerun it to replace these releases.
 
 1. Merge reviewed application/workflow files onto the repository's `main`.
 2. A repository/package administrator must allow this repository's Actions
@@ -127,3 +128,11 @@ curl --fail -H 'Host: gitops-lab.test' http://127.0.0.1:8081/
 
 Expected response is `gitops-lab v1` initially and `gitops-lab v2` after the
 reviewed version update. No DNS/router/production service changes are needed.
+
+## Known limitation of these immutable demo releases
+
+The server is single-threaded and has no accepted-socket timeout. A stalled or
+incomplete HTTP request can block other requests/probes and cause a restart.
+These releases are for the isolated, SSH-tunneled exercise, not an untrusted
+public endpoint. Fix request handling in a new release if expanding exposure;
+do not overwrite v1/v2. Keep real private/stateful data out of this disposable VM.

@@ -1,0 +1,15 @@
+{
+  "image": "ghcr.io/jgerchev/gitops-lab-app",
+  "platform": "linux/amd64",
+  "releases": {
+    "v1": {
+      "digest": "sha256:9317280a4d6b6df9e9dca1eaf05af6189cdbc22af4052f79e34fd5f9b2d1b599",
+      "workflow": "https://github.com/jgerchev/gitops-lab/actions/runs/43615319026"
+    },
+    "v2": {
+      "digest": "sha256:3d017f36adbc789fcc03f3b907c732e731469d81de4f47b53c2beceb3a3b668e",
+      "workflow": "https://github.com/jgerchev/gitops-lab/actions/runs/43615417852"
+    }
+  },
+  "anonymous_pull_verified": true
+}
