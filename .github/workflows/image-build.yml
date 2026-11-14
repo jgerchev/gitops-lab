@@ -1,0 +1,68 @@
+name: Publish one immutable lab release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release to publish once (existing tags are refused)
+        required: true
+        type: choice
+        options: [v1, v2]
+
+permissions:
+  contents: read
+
+# Serialize all releases; no two workflow runs may race the existence check.
+concurrency:
+  group: gitops-lab-image-publishing
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'jgerchev/gitops-lab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      RELEASE: ${{ inputs.release }}
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate selection and unit test
+        shell: bash
+        run: |
+          case "$RELEASE" in v1|v2) ;; *) exit 1 ;; esac
+          python3 -m unittest discover -s app -p 'test_*.py' -v
+      - name: Refuse any existing release tag (fail closed)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: python3 app/check-release.py
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Login to GHCR
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build once and publish selected release only
+        id: image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: ./app
+          file: ./app/Dockerfile
+          platforms: linux/amd64
+          build-args: RELEASE=${{ inputs.release }}
+          push: true
+          tags: ghcr.io/jgerchev/gitops-lab-app:${{ inputs.release }}
+          provenance: mode=min
+      - name: Record published digest (no deployment mutation)
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          printf 'Published `ghcr.io/jgerchev/gitops-lab-app:%s@%s`\n' "$RELEASE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
