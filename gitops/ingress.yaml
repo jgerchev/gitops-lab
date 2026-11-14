@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gitops-lab
+  namespace: gitops-lab
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: gitops-lab.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gitops-lab
+                port:
+                  number: 80
