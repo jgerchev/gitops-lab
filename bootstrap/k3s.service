@@ -1,0 +1,22 @@
+[Unit]
+Description=GitOps lab K3s (bootstrap-owned)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/local/bin/k3s server --config /etc/rancher/k3s/config.yaml
+Restart=always
+RestartSec=5s
+TimeoutStartSec=300
+TimeoutStopSec=120
+KillMode=process
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+TasksMax=infinity
+
+[Install]
+WantedBy=multi-user.target
