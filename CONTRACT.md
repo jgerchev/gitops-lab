@@ -29,6 +29,13 @@ This repository is an isolated learning lab, not a production deployment.
 
 Read-only discovery confirmed GitHub identity and SSH access. After explicit user approval, QEMU/libvirt prerequisites were installed, the SSH user joined libvirt/kvm, and Terraform 1.17.2 was installed with verified checksum in user-owned lab tooling. System-libvirt access now works. Local Docker daemon is unavailable; image builds use GitHub-hosted runners. Do not report unperformed acceptance tests as passed.
 
-## Current safety stop
+## Historical safety stop and current retry status
 
 Initial Terraform apply ultimately created all seven lab resources (ISO seed format corrected after provider readback). A bounded monitor triggered on five consecutive current swap-I/O samples during guest first boot. ACPI shutdown was followed by authenticated guest poweroff; the domain is confirmed off. No Kubernetes bootstrap or live application/lifecycle tests ran. Do not restart or apply without reviewing the failed capacity gate. State is retained and backed up on host and workstation outside Git. The public GHCR demo image has anonymous manifest access verified for both immutable releases.
+
+Subsequent inspection established the largest swap burst preceded VM startup.
+The user then explicitly authorized a boot-only retry. The VM is now running:
+cloud-init done, SSH working, guest disk expanded; a two-minute corrected
+per-QEMU/cgroup/host observation passed the announced retry gates and production
+HTTP checks. No K3s/Argo installation occurred. See README for chronology,
+telemetry-path correction, exact measurements and outstanding full acceptance.

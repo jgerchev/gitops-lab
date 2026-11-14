@@ -4,7 +4,7 @@ Isolated Terraform/libvirt VM with K3s, Argo CD and a small Git-managed HTTP app
 
 See [the assignment](Home_Server_Lab_Assignment.md) and [the implementation contract](CONTRACT.md).
 
-**Stopped at the host swap-safety gate.** Terraform created the VM, but host swap activity triggered shutdown during first boot. The VM is now **shut off**; K3s/Argo CD were **not installed**. The assignment is incomplete. Do not restart/apply until capacity and swap behavior are reviewed. Exact invocation details are in each component's README.
+**VM running after an explicitly authorized boot-only retry.** Cloud-init completed without errors and SSH works. A two-minute observation showed stable QEMU memory, no QEMU swap, ample available host memory, and healthy production endpoints. K3s/Argo CD are **not installed**; full assignment acceptance is incomplete. Historical safety-stop evidence and retry results are below. Exact invocation details are in each component's README.
 
 ## Scope and safety
 
@@ -128,3 +128,17 @@ Lab domain, dedicated network/pool and volumes remain Terraform-managed; the VM 
 - Host swappiness is **60**; transparent huge pages use **madvise**. The actual swap file is `/swap.img`, unlike older documentation. No sysctl, swap, service, container-limit or production configuration changes were made.
 
 Conclusion: **no evidence that the VM exceeded its planned guest allocation, and no demonstrated ongoing thrashing while off**. Current evidence does not prove safe operation with K3s/Argo CD or peak production load. A future explicitly agreed boot-only retry should capture per-QEMU/cgroup memory, MemAvailable, pressure stalls and swap rates together; keep existing safety restrictions until an appropriate measurement window/stop criterion is agreed.
+
+### Authorized boot-only retry — VM now running
+
+The user requested startup after the inspection. No Kubernetes installation,
+host tuning, production changes, or resource-size changes were made.
+
+- VM started at approximately 16:41:58 UTC. Initial telemetry incorrectly looked for memory counters in libvirt's emulator cgroup leaf; counters actually live in its parent. The monitor requested a precautionary ACPI shutdown on this collection error (not pressure), but the VM remained running. The corrected collector attached to the same process without another restart.
+- Corrected observation: **120 samples, 16:42:32–16:44:32 UTC**. Stop criteria announced before startup: 10 consecutive swap-I/O samples, five low-memory samples below 512 MiB available, five samples with full memory stalls above 5%, or repeated production HTTP failure. No criterion triggered. These are experiment-specific observation gates, not a blanket production-capacity guarantee; the original repository monitor retains its earlier five-sample rule.
+- QEMU RSS: approximately **744 MiB**, stable; VM cgroup memory charge approximately **814–835 MiB**, including cache/overhead; **zero process and cgroup swap** throughout.
+- Host MemAvailable: **3.66–3.72 GiB**. Host swap activity was brief: longest nonzero streak **two samples**, max swap-in 63.8 KiB/s, max swap-out 1183.9 KiB/s. Largest one-interval full-memory stall fraction was 2.327%, not sustained.
+- All **16 production health checks returned HTTP 200** across the four baseline endpoints.
+- Authenticated guest SSH: cloud-init `done`, no errors/recoverable errors; guest used memory approximately **428 MiB**, available **2.4 GiB**; root filesystem grew to approximately **24 GiB**, with **22 GiB free**. Guest K3s service inactive/not installed.
+
+The guest is left **running** as requested. This supersedes the earlier off-state status, but does not validate K3s/Argo memory usage, ingress, or peak Immich workloads. Full remaining acceptance tests are still pending.

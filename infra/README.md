@@ -13,7 +13,10 @@ verified system-libvirt access and generated/reviewed a seven-create lab-only
 plan. Apply created all resources after correcting the cloud-init volume format
 to `iso` (libvirt readback detects ISO despite QEMU's CD-ROM raw driver). The
 guest became SSH-accessible, but the host swap-safety monitor triggered and the
-VM is now shut off. **Do not restart/apply before safety review.** See the
+VM was shut off. After read-only inspection and explicit user authorization,
+a boot-only retry left the VM running with cloud-init done, an expanded disk,
+stable measured memory and healthy production endpoints. Kubernetes has not
+been installed. See the
 top-level README for current live results; worker validation alone
 does not establish lifecycle acceptance. Prerequisite approval
 does not imply permission to alter Pi-hole or other services.
