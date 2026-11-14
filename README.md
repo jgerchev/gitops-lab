@@ -4,7 +4,7 @@ Isolated Terraform/libvirt VM with K3s, Argo CD and a small Git-managed HTTP app
 
 See [the assignment](Home_Server_Lab_Assignment.md) and [the implementation contract](CONTRACT.md).
 
-**VM running after an explicitly authorized boot-only retry.** Cloud-init completed without errors and SSH works. A two-minute observation showed stable QEMU memory, no QEMU swap, ample available host memory, and healthy production endpoints. K3s/Argo CD are **not installed**; full assignment acceptance is incomplete. Historical safety-stop evidence and retry results are below. Exact invocation details are in each component's README.
+**Bootstrap interrupted by the swap-safety gate; VM is now shut off.** K3s binary/configuration and an enabled systemd unit were installed, but startup was cancelled by the monitored shutdown. Kubernetes readiness is unverified and **Argo CD was not installed**. A future VM boot will attempt to start K3s automatically. Review the measured swap behavior and safety criterion before restarting. Full assignment acceptance is incomplete; chronology and results are below.
 
 ## Scope and safety
 
@@ -142,3 +142,22 @@ host tuning, production changes, or resource-size changes were made.
 - Authenticated guest SSH: cloud-init `done`, no errors/recoverable errors; guest used memory approximately **428 MiB**, available **2.4 GiB**; root filesystem grew to approximately **24 GiB**, with **22 GiB free**. Guest K3s service inactive/not installed.
 
 The guest is left **running** as requested. This supersedes the earlier off-state status, but does not validate K3s/Argo memory usage, ingress, or peak Immich workloads. Full remaining acceptance tests are still pending.
+
+### Bootstrap attempt — stopped before Kubernetes readiness
+
+After the user explicitly requested installation, the coordinator confirmed
+Terraform **No changes**, clean cloud-init status, working guest SSH, no loaded
+local inference model, and healthy production endpoints. Both release artifacts
+passed their pinned SHA256 checks. The bootstrap installed K3s binary/config and
+enabled `k3s.service`, then the existing announced swap criterion triggered.
+
+- Host observation: 20 samples, approximately **20:43:30–20:43:49 UTC**. Ten consecutive samples with nonzero swap I/O triggered a graceful shutdown request; guest SSH closed and bootstrap exited 255 with `Job for k3s.service canceled`.
+- Minimum sampled host available RAM was about **3.15 GiB**. Peak sampled swap-in was **1050.6 KiB/s**, swap-out **15763.8 KiB/s**. Full-memory stalls peaked at **11.56% for one interval**, not five consecutive high-stall intervals.
+- QEMU RSS grew to approximately **1.07 GiB**; process swap was approximately **87 MiB** at the last sample. Some QEMU pages were already swapped before bootstrap. This was a conservative swap-gate stop, **not proven total RAM exhaustion, an OOM, or a demonstrated production outage**.
+- VM confirmed **shut off**. Follow-up: approximately **4.2 GiB** available host RAM, **1.9 GiB** occupied swap; nine current samples showed no swap-out and only one small swap-in. All four production endpoints returned HTTP 200, DNS resolved, and no kernel OOM-kill entry appeared in the inspected attempt window.
+- K3s API/node/Traefik readiness was **not reached or verified**. Argo CD installation, Application creation, ingress validation and bootstrap repeatability were **not reached**. The enabled K3s service remains on the persistent lab disk; starting the VM again will automatically attempt K3s startup.
+
+No automatic retry, VM resizing, swap/sysctl tuning, or production changes were
+made. Resume only after reviewing the swap criterion and agreeing on the next
+measurement approach; keep the protected Terraform state and partial guest for
+diagnosis. Raw attempt/monitor logs remain private outside this repository.

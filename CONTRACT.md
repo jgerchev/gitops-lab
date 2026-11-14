@@ -39,3 +39,10 @@ cloud-init done, SSH working, guest disk expanded; a two-minute corrected
 per-QEMU/cgroup/host observation passed the announced retry gates and production
 HTTP checks. No K3s/Argo installation occurred. See README for chronology,
 telemetry-path correction, exact measurements and outstanding full acceptance.
+
+Later user-authorized bootstrap attempt was interrupted by the 10-consecutive-
+swap-I/O-sample gate during K3s startup. VM is now OFF. K3s binary/config/unit
+were installed and the unit enabled, but readiness was not reached; next VM boot
+will attempt K3s automatically. Argo CD was not reached. No OOM or production
+HTTP/DNS failure was observed; do not interpret conservative gate failure as
+proof of total RAM exhaustion. No automatic restart/retry or host tuning.

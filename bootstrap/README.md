@@ -1,5 +1,11 @@
 # Guest-only bootstrap
 
+**Latest live attempt:** release downloads/checksums succeeded, K3s binary/config
+and enabled service were installed, but host swap monitoring triggered guest
+shutdown during service startup. Kubernetes readiness is unverified; Argo CD was
+not reached. VM is off; its next boot will attempt K3s automatically. See the
+top-level README before retrying. This supersedes historical worker-only status.
+
 Host prerequisites have now been approved and installed by the coordinator.
 **This worker performs no host operations or live deployment.** Nothing here
 installs host packages, runs Terraform, changes existing services, pushes Git,
